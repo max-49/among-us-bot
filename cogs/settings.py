@@ -52,6 +52,12 @@ class Settings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.command(name='set', help="set values for settings")
+    async def sett(self, ctx, setting, value):
+        with open('settings.json') as j:
+            settings = json.load(j)
+        
+
     @commands.command(name='settings', help='manage game settings')
     async def setting(self, ctx, mess=None):
         embed = discord.Embed(title="Among Us Settings", description="Click on the categories below to manage settings", color=0x00FFFF)

@@ -1,30 +1,30 @@
 {
     "game": [
-        {"setting": "Number of Impostors","value": 1},
-        {"setting": "Number of Emergency Meetings","value": 1},
-        {"setting": "Number of Impostors","value": 1},
-        {"setting": "Anonymous Votes","value": true}
+        {"num": 1, "setting": "Number of Impostors","value": 1},
+        {"num": 2, "setting": "Number of Emergency Meetings","value": 1},
+        {"num": 3, "setting": "Number of Impostors","value": 1},
+        {"num": 4, "setting": "Anonymous Votes","value": true}
     ],
     "cool": [
-        {"setting": "Emergency Cooldown","value": 0},
-        {"setting": "Discussion Time","value": 15},
-        {"setting": "Voting Time","value": 120},
-        {"setting": "Kill Cooldown","value": 45}
+        {"num": 5, "setting": "Emergency Cooldown","value": 0},
+        {"num": 6, "setting": "Discussion Time","value": 15},
+        {"num": 7, "setting": "Voting Time","value": 120},
+        {"num": 8, "setting": "Kill Cooldown","value": 45}
     ],
     "roles": {
         "crew": [
-            {"role": "Sheriff","value": true},
-            {"role": "Hacker","value": true},
-            {"role": "Engineer","value": true},
-            {"role": "Nice Guesser","value": true},
-            {"role": "Mayor","value": true}
+            {"num": 9, "role": "Sheriff","value": true},
+            {"num": 10, "role": "Hacker","value": true},
+            {"num": 11, "role": "Engineer","value": true},
+            {"num": 12, "role": "Nice Guesser","value": true},
+            {"num": 13, "role": "Mayor","value": true}
         ],
         "neutral": [
-            {"role": "Jester","value": true},
-            {"role": "Lawyer","value": true}
+            {"num": 14, "role": "Jester","value": true},
+            {"num": 15, "role": "Lawyer","value": true}
         ],
         "impostor": [
-            {"role": "Evil Guesser","value": true}
+            {"num": 16, "role": "Evil Guesser","value": true}
         ]
     }
 }
