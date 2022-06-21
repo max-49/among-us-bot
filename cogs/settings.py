@@ -53,10 +53,42 @@ class Settings(commands.Cog):
         self.bot = bot
 
     @commands.command(name='set', help="set values for settings")
-    async def sett(self, ctx, setting, value):
+    async def sett(self, ctx, num: int, value):
         with open('settings.json') as j:
             settings = json.load(j)
-        
+        if not value.isdigit():
+            return await ctx.reply("All values must be an integers!")
+        if num <= 4:
+            for setting in settings["game"]:
+                if setting["num"] == num:
+                    if num <= 3:
+                        setting["value"] = int(value)
+                        await ctx.reply(f"Value of `{setting['setting']}` successfully set to `{value}`")
+                    if num == 4:
+                        setting["value"] = bool(int(value))
+                        await ctx.reply(f"Value of `{setting['setting']}` successfully set to `{bool(int(value))}`")
+        elif num <= 8:
+            for setting in settings["cool"]:
+                if setting["num"] == num:
+                    setting["value"] = int(value)
+                    await ctx.reply(f"Value of `{setting['setting']}` successfully set to `{value}`")
+        elif num <= 13:
+            for role in settings["roles"]["crew"]:
+                if role["num"] == num:
+                    role["value"] = bool(int(value))
+                    await ctx.reply(f"Value of `{role['role']}` successfully set to `{bool(int(value))}`")
+        elif num <= 15:
+            for role in settings["roles"]["neutral"]:
+                if role["num"] == num:
+                    role["value"] = bool(int(value))
+                    await ctx.reply(f"Value of `{role['role']}` successfully set to `{bool(int(value))}`")
+        elif num == 16:
+            for role in settings["roles"]["impostor"]:
+                if role["num"] == num:
+                    role["value"] = bool(int(value))
+                    await ctx.reply(f"Value of `{role['role']}` successfully set to `{bool(int(value))}`")
+        with open('settings.json', 'w') as j:
+            json.dump(settings, j)
 
     @commands.command(name='settings', help='manage game settings')
     async def setting(self, ctx, mess=None):
@@ -79,9 +111,9 @@ class Settings(commands.Cog):
     async def gamesettings(self, ctx, mess):
         with open('settings.json') as j:
             settings = json.load(j)
-        embed = discord.Embed(title="Game Settings", color=0x00FFFF)
+        embed = discord.Embed(title="Game Settings", description="Use ?set <setting number> <value> to change settings.", color=0x00FFFF)
         for setting in settings["game"]:
-            embed.add_field(name=setting["setting"], value=setting["value"], inline=False)
+            embed.add_field(name=f'{setting["num"]}) {setting["setting"]}', value=setting["value"], inline=False)
         arrow = BackArrow(ctx.author)
         await mess.edit(embed=embed, view=arrow)
         await arrow.wait()
@@ -90,9 +122,9 @@ class Settings(commands.Cog):
     async def coolsettings(self, ctx, mess):
         with open('settings.json') as j:
             settings = json.load(j)
-        embed = discord.Embed(title="Cooldown Settings", description="All values are in seconds", color=0x00FFFF)
+        embed = discord.Embed(title="Cooldown Settings", description="Use ?set <setting number> <value> to change settings. (All values are in seconds)", color=0x00FFFF)
         for setting in settings["cool"]:
-            embed.add_field(name=setting["setting"], value=setting["value"], inline=False)
+            embed.add_field(name=f'{setting["num"]}) {setting["setting"]}', value=setting["value"], inline=False)
         arrow = BackArrow(ctx.author)
         await mess.edit(embed=embed, view=arrow)
         await arrow.wait()
@@ -101,10 +133,10 @@ class Settings(commands.Cog):
     async def rolesettings(self, ctx, mess):
         with open('settings.json') as j:
             settings = json.load(j)
-        embed = discord.Embed(title="Role Settings", color=0x00FFFF)
-        embed.add_field(name="Crewmate Roles:", value="\n".join([f"{x['role']}: {x['value']}" for x in settings["roles"]["crew"]]), inline=False)
-        embed.add_field(name="Neutral Roles:", value="\n".join([f"{x['role']}: {x['value']}" for x in settings["roles"]["neutral"]]), inline=False)
-        embed.add_field(name="Impostor Roles:", value="\n".join([f"{x['role']}: {x['value']}" for x in settings["roles"]["impostor"]]), inline=False)
+        embed = discord.Embed(title="Role Settings", description="Use ?set <setting number> <value> to change settings.", color=0x00FFFF)
+        embed.add_field(name="Crewmate Roles:", value="\n".join([f"{x['num']}) {x['role']}: {x['value']}" for x in settings["roles"]["crew"]]), inline=False)
+        embed.add_field(name="Neutral Roles:", value="\n".join([f"{x['num']}) {x['role']}: {x['value']}" for x in settings["roles"]["neutral"]]), inline=False)
+        embed.add_field(name="Impostor Roles:", value="\n".join([f"{x['num']}) {x['role']}: {x['value']}" for x in settings["roles"]["impostor"]]), inline=False)
         arrow = BackArrow(ctx.author)
         await mess.edit(embed=embed, view=arrow)
         await arrow.wait()

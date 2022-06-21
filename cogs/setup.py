@@ -1,3 +1,5 @@
+import json
+import random
 import discord
 from discord.ext import commands 
 
@@ -12,7 +14,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label='Join Game', style=discord.ButtonStyle.grey)
     async def join(self, button: discord.ui.Button, interaction: discord.Interaction):
         if interaction.user in self.players:
-            await interaction.response.send_message("You've already joined this game!", ephemeral=True)
+            return await interaction.response.send_message("You've already joined this game!", ephemeral=True)
         await interaction.channel.send(f'{interaction.user.mention} has joined the game!')
         self.players.append(interaction.user)
     
@@ -51,7 +53,65 @@ class Setup(commands.Cog):
         setup_view = SetupView(ctx.author.id)
         await ctx.send(embed=embed, view=setup_view)
         await setup_view.wait()
-        await ctx.send(f"Starting game with {', '.join([x.mention for x in setup_view.players])}...")
+        if not setup_view.cancelled:
+            await ctx.send(f"Starting game with {', '.join([x.mention for x in setup_view.players])}...")
+            await ctx.invoke(self.setup_channels, setup_view.players)
+    
+    async def setup_channels(self, ctx, players):
+        with open('settings.json') as j:
+            settings = json.load(j)
+        crewmates = [{"player": player, "role": None} for player in players]
+        neutrals = []
+        impostors = []
+        for _ in range(settings["game"][0]["value"]):
+            impostor = random.choice(crewmates)
+            impostors.append(impostor)
+            crewmates.remove(impostor)
+        for _ in range(settings["game"][2]["value"]):
+            neutral = random.choice(crewmates)
+            neutrals.append(neutral)
+            crewmates.remove(neutral)
+        crew_roles = [role for role in settings["roles"]["crew"] if role["value"]]
+        neutral_roles = [role for role in settings["roles"]["neutral"] if role["value"]]
+        impostor_roles = [role for role in settings["roles"]["impostor"] if role["value"]]
+        for crew in crewmates:
+            role = random.choice(crew_roles)
+            crew["role"] = role
+            crew_roles.remove(role)
+        for neutral in neutrals:
+            role = random.choice(neutral_roles)
+            neutral["role"] = role
+            neutral_roles.remove(role)
+        for impostor in impostors:
+            role = random.choice(impostor_roles)
+            impostor["role"] = role
+            impostor_roles.remove(role)
+        category = await ctx.guild.create_category("Among Us Channels")
+        for player in (crewmates + neutrals + impostors):
+            channel = await category.create_text_channel(f'{player["player"].name}-{player["role"]["role"]}', overwrites={ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False), player["player"]: discord.PermissionOverwrite(read_messages=True)})
+            player["channel"] = channel
+        await ctx.invoke(self.send_roles, crewmates + neutrals + impostors)
+
+    async def send_roles(self, ctx, players):
+        for player in players:
+            if player["role"]["role"] == "Sheriff":
+                await ctx.invoke(self.bot.get_command("sheriff"), player)
+            if player["role"]["role"] == "Hacker":
+                await ctx.invoke(self.bot.get_command("hacker"), player)
+            if player["role"]["role"] == "Engineer":
+                await ctx.invoke(self.bot.get_command("engineer"), player)
+            if player["role"]["role"] == "Nice Guesser":
+                await ctx.invoke(self.bot.get_command("niceguesser"), player)
+            if player["role"]["role"] == "Mayor":
+                await ctx.invoke(self.bot.get_command("mayor"), player)
+            if player["role"]["role"] == "Jester":
+                await ctx.invoke(self.bot.get_command("jester"), player)
+            if player["role"]["role"] == "Lawyer":
+                await ctx.invoke(self.bot.get_command("lawyer"), player)
+            if player["role"]["role"] == "Evil Guesser":
+                await ctx.invoke(self.bot.get_command("evilguesser"), player)
+            if player["role"]["role"] == "Impostor":
+                await ctx.invoke(self.bot.get_command("impostor"), player)
 
 
 def setup(bot):
