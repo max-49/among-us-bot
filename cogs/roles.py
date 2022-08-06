@@ -2,24 +2,43 @@ import discord
 from discord.ext import commands
 
 class GuesserButton(discord.ui.Button):
-    def __init__(self, label, roles):
+    def __init__(self, label):
         super().__init__(label=label, style=discord.ButtonStyle.grey)
-        self.chosen = None
-        self.roles = roles
 
     async def callback(self, interaction):
-        self.chosen = self.label
+        name = self.label
+        if self.view.user_selected is None:
+            for player in self.view.players:
+                if player["player"].name == name:
+                    self.view.user_selected = player["player"]
+            self.view.clear_items()
+            print(self.view.roles)
+            for role in self.view.roles:
+                self.view.add_item(GuesserButton(role["role"]))
+            await interaction.response.edit_message(view=self.view)
+        else:
+            self.view.role_selected = name
+            for player in self.view.players:
+                if player["player"] == self.view.user_selected:
+                    if player["role"]["role"] == self.view.role_selected:
+                        print("killed")
+                    else:
+                        print("you die")
+                    for child in self.view.children:
+                        child.disabled = True
+                    await interaction.response.edit_message(view=self.view)
 
 
 class GuesserView(discord.ui.View):
-    def __init__(self, user, players, roles):
+    def __init__(self, players, roles):
         super().__init__()
-        self.user = user
-        self.players = players
+        self.role_selected = None
         self.roles = roles
+        self.players = players
         self.user_selected = None
         for i in range(len(players)):
-            self.add_item(GuesserButton(players[i]["player"].name, roles))
+            if players[i]["alive"]:
+                self.add_item(GuesserButton(players[i]["player"].name))
 
 
 class Roles(commands.Cog):
@@ -39,6 +58,11 @@ class Roles(commands.Cog):
         embed.add_field(name="With great power comes great responsibility...", value="Use your hacking skills to catch impostors red-handed!")
         await player["channel"].send(embed=embed)
         await player["channel"].send('-'*15)
+
+    @commands.command(hidden=True)
+    async def hackerround(self, ctx, player):
+        embed = discord.Embed(title="Hacker Round", description="View vitals by clicking the button below!", color=0x00FF00)
+        await player["channel"].send(embed=embed)
     
     @commands.command(hidden=True)
     async def engineer(self, ctx, player):
@@ -55,8 +79,8 @@ class Roles(commands.Cog):
         await player["channel"].send('-'*15)
 
     @commands.command(hidden=True)
-    async def niceguesserround(self, ctx, player, players, imp_roles):
-        guesser = GuesserView(player,players,imp_roles)
+    async def niceguessermeeting(self, ctx, player, players, imp_roles):
+        guesser = GuesserView(players,imp_roles)
         embed = discord.Embed(title="Nice Guesser Meeting", description="Choose who you think is the impostor!", color=0xFFD700)
         embed.add_field(name="You can choose to make a guess or not during this meeting", value="If you guess wrong, you'll die, so be careful!")
         await player["channel"].send(embed=embed, view=guesser)
@@ -78,7 +102,8 @@ class Roles(commands.Cog):
     @commands.command(hidden=True)
     async def lawyer(self, ctx, player):
         embed = discord.Embed(title="You are the Lawyer (Neutral)!", description="Keep your client from getting voted out to win with them!", color=0x964B00)
-        embed.add_field(name="Use your expert defending skills to protect your client (an impostor or jester).", value="If your client wins, you win with them! If your client dies or gets voted out, you turn into a crewmate.")
+        embed.add_field(name="Use your expert defending skills to protect your client (an impostor or jester).", value="If your client wins, you win with them! If your client dies or gets voted out, you turn into a crewmate.", inline=False)
+        embed.add_field(name="Your client is", value=player["client"].name, inline=False)
         await player["channel"].send(embed=embed)
         await player["channel"].send('-'*15)
 
@@ -90,8 +115,8 @@ class Roles(commands.Cog):
         await player["channel"].send('-'*15)
 
     @commands.command(hidden=True)
-    async def evilguesserround(self, ctx, player, players, roles):
-        guesser = GuesserView(player,players,roles)
+    async def evilguessermeeting(self, ctx, player, players, roles):
+        guesser = GuesserView(players,roles)
         embed = discord.Embed(title="Evil Guesser Meeting", description="Guess the roles of crewmates to kill them!", color=0xFF0000)
         embed.add_field(name="You can choose to make a guess or not during this meeting", value="If you guess wrong, you'll die, so be careful!")
         await player["channel"].send(embed=embed, view=guesser)

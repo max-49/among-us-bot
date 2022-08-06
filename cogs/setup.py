@@ -4,6 +4,29 @@ import asyncio
 import discord
 from discord.ext import commands 
 
+class Clean(discord.ui.View):
+    def __init__(self, user):
+        super().__init__(timeout=None)
+        self.clean = None
+        self.restart = None
+        self.user = user 
+
+    @discord.ui.button(label="Clean", style=discord.ButtonStyle.red)
+    async def clean(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if interaction.user == self.user:
+            self.clean = True
+        else:
+            await interaction.response.send_message("Only the host can use these buttons!", ephemeral=True)
+    
+    @discord.ui.button(label="Clean and Restart", style=discord.ButtonStyle.green)
+    async def cleanstart(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if interaction.user == self.user:
+            self.clean = True
+            self.restart = True
+        else:
+            await interaction.response.send_message("Only the host can use these buttons!", ephemeral=True)
+
+
 class VotingButton(discord.ui.Button):
     def __init__(self, label):
         super().__init__(label=label, style=discord.ButtonStyle.grey)
@@ -120,7 +143,11 @@ class Setup(commands.Cog):
         self.roles = None
         self.imp_roles = None
         self.announcement_channel = None
+        self.ghost_chat = None
         self.is_reported = None
+        self.alive_role = None
+        self.ghost_role = None
+        self.dead_role = None
 
     @commands.command(name='setup', help='setup a new game of among us')
     async def setup(self, ctx):
@@ -134,6 +161,14 @@ class Setup(commands.Cog):
 
     @commands.command(name='clean', help='clean up chats')
     async def clean(self, ctx):
+        if self.alive_role is not None:
+            for member in ctx.guild.members:
+                if self.alive_role in member.roles:
+                    await member.remove_roles(self.alive_role)
+                if self.dead_role in member.roles:
+                    await member.remove_roles(self.dead_role)
+                if self.ghost_role in member.roles:
+                    await member.remove_roles(self.ghost_role)
         if self.category is not None:
             for channel in self.category.channels:
                 await channel.delete()
@@ -147,6 +182,7 @@ class Setup(commands.Cog):
         with open('settings.json') as j:
             settings = json.load(j)
         crewmates = [{"player": player, "role": None} for player in players]
+        players = [{"player": player, "role": None} for player in players]
         neutrals = []
         impostors = []
         for _ in range(settings["game"][0]["value"]):
@@ -161,32 +197,40 @@ class Setup(commands.Cog):
         neutral_roles = [role for role in settings["roles"]["neutral"] if role["value"]]
         impostor_roles = [role for role in settings["roles"]["impostor"] if role["value"]]
         self.roles = crew_roles + neutral_roles + impostor_roles
-        self.imp_roles = impostor_roles
+        self.imp_roles = [role for role in impostor_roles]
         for crew in crewmates:
+            index = players.index(crew)
             role = random.choice(crew_roles)
-            crew["role"] = role
+            players[index]["role"] = role
             crew_roles.remove(role)
-            crew["is_impostor"] = False
+            players[index]["is_impostor"] = False
         for neutral in neutrals:
+            index = players.index(neutral)
             role = random.choice(neutral_roles)
-            neutral["role"] = role
+            players[index]["role"] = role
             neutral_roles.remove(role)
-            neutral["is_impostor"] = False
+            players[index]["is_impostor"] = False
         for impostor in impostors:
+            index = players.index(impostor)
             role = random.choice(impostor_roles)
-            impostor["role"] = role
+            players[index]["role"] = role
             impostor_roles.remove(role)
-            impostor["is_impostor"] = True
+            players[index]["is_impostor"] = True
+        self.alive_role = discord.utils.get(ctx.guild.roles, name='Alive')
+        self.dead_role = discord.utils.get(ctx.guild.roles, name='Dead')
+        self.ghost_role = discord.utils.get(ctx.guild.roles, name='Ghost')
         category = await ctx.guild.create_category("Among Us Channels")
         self.category = category
-        self.announcement_channel = await category.create_text_channel('announcements')
+        self.announcement_channel = await category.create_text_channel('announcements', overwrites={ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False), self.alive_role: discord.PermissionOverwrite(read_messages=True), self.ghost_role: discord.PermissionOverwrite(read_messages=True), self.dead_role: discord.PermissionOverwrite(read_messages=True)})
+        self.ghost_chat = await category.create_text_channel('ghost-chat', overwrites={ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False), self.alive_role: discord.PermissionOverwrite(read_messages=False), self.dead_role: discord.PermissionOverwrite(read_messages=True), self.ghost_role: discord.PermissionOverwrite(read_messages=True)})
         jester_player = None
-        for player in (crewmates + neutrals + impostors):
+        for player in players:
             if player["role"]["role"] == "Jester":
                 jester_player = player["player"]
                 break
         
-        for player in (crewmates + neutrals + impostors):
+        for player in players:
+            await player["player"].add_roles(self.alive_role)
             channel = await category.create_text_channel(f'{player["player"].name}-{player["role"]["role"]}', overwrites={ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False), player["player"]: discord.PermissionOverwrite(read_messages=True)})
             player["channel"] = channel
             player["alive"] = True
@@ -194,9 +238,11 @@ class Setup(commands.Cog):
             player["votes"] = 0
             player["voted"] = False
             if player["role"]["role"] == "Lawyer":
-                lawyer_clients = [x["player"] for x in (crewmates + neutrals + impostors) if x["is_impostor"]] + [jester_player]
+                lawyer_clients = [x["player"] for x in players if x["is_impostor"]]
+                if jester_player is not None:
+                    lawyer_clients.append(jester_player)
                 player["client"] = random.choice(lawyer_clients)
-        await ctx.invoke(self.send_roles, crewmates + neutrals + impostors)
+        await ctx.invoke(self.send_roles, players)
 
     async def send_roles(self, ctx, players, rounds=""):
         for player in players:
@@ -222,14 +268,32 @@ class Setup(commands.Cog):
     
     async def start_round(self, ctx, players):
         report_view = ReportView(players)
+        await self.announcement_channel.set_permissions(self.alive_role, read_messages=False)
         for player in players:
             if player["alive"]:
+                # if player["role"]["role"] == "Sheriff":
+                #     await ctx.invoke(self.bot.get_command("sheriffround"), player)
+                #     await asyncio.sleep(1.5)
+                # if player["role"]["role"] == "Hacker":
+                #     await ctx.invoke(self.bot.get_command("hackerround"), player)
+                #     await asyncio.sleep(1.5)
+                # if player["role"]["role"] == "Engineer":
+                #     await ctx.invoke(self.bot.get_command("engineerround"), player)
+                #     await asyncio.sleep(1.5)
+                # if player["role"]["role"] == "Lawyer":
+                #     await ctx.invoke(self.bot.get_command("lawyerround"), player)
+                #     await asyncio.sleep(1.5)
+                # if player["is_impostor"]:
+                #     await ctx.invoke(self.bot.get_command("impostorround"), player)
+                #     await asyncio.sleep(1.5)
                 embed = discord.Embed(title="Task Round", description="Do your tasks and try not to get killed! To report a body, press the report button when you're touching a body. To call an emergency meeting, press the emergency button when you are at the meeting table!", color=0x808080)
                 embed.add_field(name="Emergency meetings left:", value=str(player["meetings"]))
                 await player["channel"].send(embed=embed, view=report_view)
             else:
-                await player["channel"].set_permissions(player["player"], send_messages=False)
+                embed = discord.Embed(title="You are Dead!", description="Even though you're dead, you can still do tasks and chat with other dead people!", color=0x000000)
+                await player["channel"].send(embed=embed)
         await report_view.wait()
+        await self.announcement_channel.set_permissions(self.alive_role, read_messages=True)
         players = report_view.players
         if report_view.reported:
             embed = discord.Embed(title="A body has been reported!", description="Please head to the meeting table immediately!", color=0xFF0000)
@@ -256,11 +320,17 @@ class Setup(commands.Cog):
         for player in players:
             if player["alive"]:
                 await player["channel"].purge(limit=1)
+                if player["role"]["role"] == "Nice Guesser":
+                    await ctx.invoke(self.bot.get_command("niceguessermeeting"), player, players, self.imp_roles)
+                    await asyncio.sleep(1)
+                if player["role"]["role"] == "Evil Guesser":
+                    await ctx.invoke(self.bot.get_command("evilguessermeeting"), player, players, self.roles)
+                    await asyncio.sleep(1)
                 embed = discord.Embed(title="Voting Time", description="Vote out who you think is the impostor!", color=0x0000FF)
                 await player["channel"].send(embed=embed, view=voting_view)
         for i in range(settings["cool"][2]["value"]):
             players = voting_view.players
-            if all([player["voted"] for player in players]):
+            if all([player["voted"] for player in players if player["alive"]]):
                 break
             if i == (settings["cool"][2]["value"]-6):
                 for player in players:
@@ -293,6 +363,8 @@ class Setup(commands.Cog):
             for player in players:
                 if player["player"].name == sorted_players[0]["player"]:
                     player["alive"] = False
+                    await player["player"].remove_roles(self.alive_role)
+                    await player["player"].add_roles(self.ghost_role)
                     if player["role"]["role"] == "Jester":
                         end_game = 0
         for player in players:
@@ -332,7 +404,14 @@ class Setup(commands.Cog):
                             if person["client"] == player["player"]:
                                 text = f" and **{person['player'].name}** also wins as their Lawyer"
                     embed.add_field(name="Winners", value=f"**{player['player'].name}** wins{text}!")
-            await ctx.send(embed=embed)
+            clean_view = Clean(ctx.author)
+            await ctx.send(embed=embed, view=clean_view)
+            await clean_view.wait()
+            if clean_view.clean and clean_view.restart:
+                await ctx.invoke(self.clean)
+                await ctx.invoke(self.setup)
+            else:
+                await ctx.invoke(self.clean)
         if reason == 1:
             embed = discord.Embed(title="Crewmates win!", description="All impostors have been voted out!", color=0x0000FF)
             text = []
@@ -340,16 +419,36 @@ class Setup(commands.Cog):
                 if not player["is_impostor"]:
                     text.append(player["player"].name)
             embed.add_field(name="Winners", value=', '.join([f"**{player}**" for player in text]))
-            await ctx.send(embed=embed)
+            clean_view = Clean(ctx.author)
+            await ctx.send(embed=embed, view=clean_view)
+            await clean_view.wait()
+            if clean_view.clean and clean_view.restart:
+                await ctx.invoke(self.clean)
+                await ctx.invoke(self.setup)
+            else:
+                await ctx.invoke(self.clean)
         if reason == 2:
             embed = discord.Embed(title="Impostors win!", description="The crewmates failed to outlive the impostors", color=0xFF0000)
             text = []
+            extra = ""
             for player in players:
                 if player["is_impostor"]:
                     text.append(player["player"].name)
-            embed.add_field(name="Winners", value=', '.join([f"**{player}**" for player in text]))
-            await ctx.send(embed=embed)
-
+            for player in players:
+                if player["is_impostor"]:
+                    for person in players:
+                        if person["role"]["role"] == "Lawyer":
+                            if person["client"] == player["player"]:
+                                extra = f"and **{person['player'].name}** also wins as the Lawyer"
+            embed.add_field(name="Winners", value=', '.join([f"**{player}**" for player in text]) + extra)
+            clean_view = Clean(ctx.author)
+            await ctx.send(embed=embed, view=clean_view)
+            await clean_view.wait()
+            if clean_view.clean and clean_view.restart:
+                await ctx.invoke(self.clean)
+                await ctx.invoke(self.setup)
+            else:
+                await ctx.invoke(self.clean)
 
 def setup(bot):
     bot.add_cog(Setup(bot))
